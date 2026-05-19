@@ -9,12 +9,19 @@ from auto_register.integrations import qwen_portal
 class FakeMailProvider:
     def __init__(self, activation_url="https://qwen.example.com/activate?token=ok"):
         self.activation_url = activation_url
+        self.events = []
 
     def generate_email(self):
         return "new@example.com"
 
-    def wait_for_activation_link(self, email, check_stop=None):
+    def collect_mailbox_snapshot(self):
+        self.events.append("snapshot")
+        return {"old-mail"}
+
+    def wait_for_activation_link(self, email, check_stop=None, old_ids=None):
         self.waited_email = email
+        self.old_ids = old_ids
+        self.events.append("wait")
         return self.activation_url
 
 
@@ -71,36 +78,42 @@ class QwenPortalRunnerTests(unittest.TestCase):
         page = FakePage()
         logs = []
         remote_auth = Mock(return_value=True)
-        with patch.object(qwen_portal, "get_email_provider", return_value=FakeMailProvider()), patch.object(
+        provider = FakeMailProvider()
+        def fake_register(_self, _page, _creds):
+            provider.events.append("register")
+
+        with patch.object(qwen_portal, "get_email_provider", return_value=provider), patch.object(
             qwen_portal, "sync_playwright", return_value=FakePlaywright(page)
         ), patch.object(qwen_portal, "_generate_password", return_value="Password123"), patch.object(
             qwen_portal, "append_account", append_account, create=True
-        ), patch.object(qwen_portal.QwenPortalRunner, "_do_register", lambda self, page, creds: None), patch.object(
+        ), patch.object(qwen_portal.QwenPortalRunner, "_do_register", fake_register), patch.object(
             qwen_portal.QwenPortalRunner, "_browser_launch_options", lambda self: {"headless": True}
         ), patch.object(
             qwen_portal.QwenPortalRunner, "_run_remote_proxy_link_auth", remote_auth, create=True
         ):
             runner = qwen_portal.QwenPortalRunner(headless=True, on_step=logs.append)
             ok = runner.run()
-        return ok, page, logs, remote_auth
+        return ok, page, logs, remote_auth, provider
 
     def test_activation_success_appends_local_account_and_finishes(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "accounts.txt"
             append_account = Mock(return_value=output_path)
 
-            ok, page, logs, remote_auth = self._run_with_fakes(append_account)
+            ok, page, logs, remote_auth, provider = self._run_with_fakes(append_account)
 
         self.assertTrue(ok)
         append_account.assert_called_once_with("new@example.com", "Password123")
         self.assertFalse(remote_auth.called)
+        self.assertEqual(provider.events[:2], ["snapshot", "register"])
+        self.assertEqual(provider.old_ids, {"old-mail"})
         self.assertIn("https://qwen.example.com/activate?token=ok", [call[0] for call in page.goto_calls])
         self.assertTrue(any("本地账号已保存" in line for line in logs))
 
     def test_writer_failure_returns_false(self):
         append_account = Mock(side_effect=OSError("disk full"))
 
-        ok, _page, logs, remote_auth = self._run_with_fakes(append_account)
+        ok, _page, logs, remote_auth, _provider = self._run_with_fakes(append_account)
 
         self.assertFalse(ok)
         self.assertFalse(remote_auth.called)

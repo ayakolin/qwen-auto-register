@@ -5,6 +5,7 @@ from pathlib import Path
 from auto_register.config import WorkerMailConfig
 from auto_register.providers.one_sec_mail_provider import (
     CloudflareWorkerMailProvider,
+    _extract_activation_url_from_text,
     _normalize_mail_item,
 )
 
@@ -93,6 +94,22 @@ class WorkerMailProviderTests(unittest.TestCase):
         self.assertEqual(item["source"], "noreply@example.com")
         self.assertIn("https://example.com/activate", item["raw"])
 
+    def test_normalize_mail_item_decodes_mime_raw_body_for_activation_links(self):
+        raw = (
+            "Content-Type: text/html; charset=utf-8\n"
+            "Content-Transfer-Encoding: quoted-printable\n"
+            "\n"
+            "<a href=3D\"https://chat.qwen.ai/activate?token=3Dabc123\">activate</a>"
+        )
+
+        item = _normalize_mail_item({"id": "mime", "raw": raw})
+
+        self.assertIn("https://chat.qwen.ai/activate?token=abc123", item["raw"])
+        self.assertEqual(
+            _extract_activation_url_from_text(item["raw"]),
+            "https://chat.qwen.ai/activate?token=abc123",
+        )
+
     def test_wait_for_activation_link_skips_snapshot_mail(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             client = FakeClient(
@@ -138,7 +155,7 @@ class WorkerMailProviderTests(unittest.TestCase):
             )
             provider.generate_email()
 
-            url = provider.wait_for_activation_link("new@example.com")
+            url = provider.wait_for_activation_link("new@example.com", old_ids={"old"})
 
         self.assertEqual(url, "https://example.com/activate?token=new")
         self.assertEqual(client.gets[0][0], "https://mail.example.com/api/mails")

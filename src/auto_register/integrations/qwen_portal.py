@@ -116,6 +116,7 @@ class QwenPortalRunner:
         self._latest_creds = creds
         self._log(f"1. 临时邮箱: {creds.email}")
         self._log(f"2. 随机密码已生成")
+        old_mail_ids = mail_provider.collect_mailbox_snapshot()
 
         with sync_playwright() as p:
             browser = p.chromium.launch(**self._browser_launch_options())
@@ -135,7 +136,11 @@ class QwenPortalRunner:
                     self._log("[Portal] 在等待邮件前收到停止请求，放弃此次注册")
                     return False
                     
-                activation_url = mail_provider.wait_for_activation_link(creds.email, check_stop=self._check_stop)
+                activation_url = mail_provider.wait_for_activation_link(
+                    creds.email,
+                    check_stop=self._check_stop,
+                    old_ids=old_mail_ids,
+                )
                 if not activation_url:
                     self._log("[Portal] 等待邮件时收到停止请求或超时")
                     return False

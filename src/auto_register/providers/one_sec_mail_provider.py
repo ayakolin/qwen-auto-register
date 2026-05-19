@@ -8,6 +8,8 @@ import random
 import re
 import string
 import time
+from email import message_from_string
+from email.policy import default
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -61,6 +63,37 @@ def _sender_text(value: Any) -> str:
     return _as_text(value).strip()
 
 
+def _decode_raw_mail_body(raw: str) -> str:
+    """Decode text/html and text/plain parts from RFC822 raw mail."""
+    if not raw:
+        return ""
+    try:
+        message = message_from_string(raw, policy=default)
+    except Exception:
+        return ""
+
+    parts = message.walk() if message.is_multipart() else [message]
+    decoded: list[str] = []
+    for part in parts:
+        if part.get_content_maintype() != "text":
+            continue
+        try:
+            content = part.get_content()
+        except Exception:
+            payload = part.get_payload(decode=True)
+            if payload is None:
+                content = part.get_payload()
+            else:
+                charset = part.get_content_charset() or "utf-8"
+                try:
+                    content = payload.decode(charset, errors="ignore")
+                except LookupError:
+                    content = payload.decode("utf-8", errors="ignore")
+        if content:
+            decoded.append(str(content))
+    return "\n".join(decoded)
+
+
 def _normalize_mail_item(item: dict[str, Any]) -> dict[str, str]:
     """Normalize a Worker mail item to id/subject/source/raw fields."""
     subject = _as_text(item.get("subject")).strip()
@@ -72,7 +105,11 @@ def _normalize_mail_item(item: dict[str, Any]) -> dict[str, str]:
     mail_id = _as_text(item.get("id") or item.get("message_id") or item.get("uid")).strip()
 
     raw = _as_text(item.get("raw")).strip()
-    if not raw:
+    if raw:
+        decoded_body = _decode_raw_mail_body(raw)
+        if decoded_body:
+            raw = f"{decoded_body}\n\n{raw}"
+    else:
         body = (
             _as_text(item.get("body"))
             or _as_text(item.get("html_body"))
@@ -198,8 +235,12 @@ class CloudflareWorkerMailProvider:
 
         return [_normalize_mail_item(item) for item in _mail_items_from_response(data)]
 
-    def _collect_mailbox_snapshot(self) -> set[str]:
+    def collect_mailbox_snapshot(self) -> set[str]:
+        """Collect current mail IDs before triggering a registration email."""
         return {_mail_item_id(item) for item in self.fetch_emails()}
+
+    def _collect_mailbox_snapshot(self) -> set[str]:
+        return self.collect_mailbox_snapshot()
 
     def wait_for_activation_link(
         self,
@@ -207,6 +248,7 @@ class CloudflareWorkerMailProvider:
         subject_contains: Optional[str] = None,
         from_contains: Optional[str] = None,
         check_stop: Optional[Callable[[], bool]] = None,
+        old_ids: Optional[set[str]] = None,
     ) -> str:
         """Poll new Worker mail until an activation link is found."""
         if email != self._email or not self._token:
@@ -215,7 +257,7 @@ class CloudflareWorkerMailProvider:
         if check_stop and check_stop():
             return ""
 
-        seen_ids = self._collect_mailbox_snapshot()
+        seen_ids = set(old_ids) if old_ids is not None else self.collect_mailbox_snapshot()
         deadline = time.monotonic() + self._timeout
         while time.monotonic() < deadline:
             if check_stop and check_stop():
