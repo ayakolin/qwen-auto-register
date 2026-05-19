@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+import os
 
 import auto_register.web.app as web_app
 from auto_register.web.app import RuntimeState, StartRequest
@@ -59,6 +60,50 @@ class RuntimeStateTests(unittest.TestCase):
             any(call.args[0] == "waiting_human_verification" for call in set_phase_mock.call_args_list)
         )
         self.assertEqual(state.snapshot()["phase"], "success")
+
+    def test_run_flow_clears_proxy_env_when_request_has_no_proxy(self):
+        state = RuntimeState()
+        state.start_run()
+        req = StartRequest(headless=False, loop_count=1)
+
+        class FakeRunner:
+            def __init__(self, headless, on_step, check_stop, on_phase_change):
+                pass
+
+            def run(self):
+                return True
+
+        original = {key: os.environ.get(key) for key in (
+            "QWEN_PLAYWRIGHT_PROXY",
+            "QWEN_PLAYWRIGHT_PROXY_USERNAME",
+            "QWEN_PLAYWRIGHT_PROXY_PASSWORD",
+            "QWEN_PLAYWRIGHT_PROXY_BYPASS",
+        )}
+        os.environ["QWEN_PLAYWRIGHT_PROXY"] = "http://127.0.0.1:8080"
+        os.environ["QWEN_PLAYWRIGHT_PROXY_USERNAME"] = "user"
+        os.environ["QWEN_PLAYWRIGHT_PROXY_PASSWORD"] = "pass"
+        os.environ["QWEN_PLAYWRIGHT_PROXY_BYPASS"] = "localhost"
+        observed = {}
+        try:
+            with patch.object(web_app, "STATE", state), patch.object(web_app, "QwenPortalRunner", FakeRunner):
+                web_app._run_flow(1, req)
+                observed = {key: os.environ.get(key) for key in (
+                    "QWEN_PLAYWRIGHT_PROXY",
+                    "QWEN_PLAYWRIGHT_PROXY_USERNAME",
+                    "QWEN_PLAYWRIGHT_PROXY_PASSWORD",
+                    "QWEN_PLAYWRIGHT_PROXY_BYPASS",
+                )}
+        finally:
+            for key, value in original.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY"])
+        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY_USERNAME"])
+        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY_PASSWORD"])
+        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY_BYPASS"])
 
 
 if __name__ == "__main__":

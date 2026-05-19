@@ -129,6 +129,15 @@ def _run_flow(run_id: int, req: StartRequest) -> None:
             if req.proxy_bypass:
                 os.environ["QWEN_PLAYWRIGHT_PROXY_BYPASS"] = req.proxy_bypass.strip()
                 STATE.append_log(f"[Web] 已设置代理绕过: {req.proxy_bypass.strip()}")
+        else:
+            for key in (
+                "QWEN_PLAYWRIGHT_PROXY",
+                "QWEN_PLAYWRIGHT_PROXY_USERNAME",
+                "QWEN_PLAYWRIGHT_PROXY_PASSWORD",
+                "QWEN_PLAYWRIGHT_PROXY_BYPASS",
+            ):
+                os.environ.pop(key, None)
+            STATE.append_log("[Web] 已清除本次运行的代理配置")
 
         # 循环执行
         loop_count = max(1, min(req.loop_count, 100))  # 限制在 1-100
@@ -433,7 +442,7 @@ def create_app() -> FastAPI:
             <button id="btnStop" class="btn-danger" disabled>停止</button>
         </div>
 
-        <div id="proxyModal" style="display:none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; justify-content: center; align-items: center;">
+        <div id="proxyModal" style="display:none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
             <div style="background: white; padding: 24px; border-radius: 12px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
                 <h2 style="margin: 0 0 16px 0; font-size: 20px;">代理配置</h2>
                 <div style="margin-bottom: 16px;">
