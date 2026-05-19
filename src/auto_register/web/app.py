@@ -623,7 +623,7 @@ def create_app() -> FastAPI:
                 }
 
                 verificationMessage.textContent = message || '请在浏览器窗口完成真人校验，完成后流程会自动继续。';
-                verificationLogs.textContent = logs.slice(-5).join('\n') || '等待日志更新...';
+                verificationLogs.textContent = logs.slice(-5).join('\\n') || '等待日志更新...';
             }
 
             async function updateStatus() {
