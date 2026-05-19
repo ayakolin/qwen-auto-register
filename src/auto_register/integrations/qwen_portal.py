@@ -39,20 +39,31 @@ class QwenPortalRunner:
     """Run simplified flow: register -> activate -> append local account."""
 
     REGISTER_URL = "https://chat.qwen.ai/auth?mode=register"
+    HUMAN_VERIFICATION_TEXTS = (
+        "access verification",
+        "please complete the operation to verify that you are a real person",
+    )
 
     def __init__(
         self,
         headless: bool = False,
         on_step: Optional[Callable[[str], None]] = None,
         check_stop: Optional[Callable[[], bool]] = None,
+        on_phase_change: Optional[Callable[[str, Optional[str]], None]] = None,
     ):
         self._headless = headless
+        self._headless_requested = headless
         self._on_step = on_step or (lambda _: None)
         self._check_stop = check_stop or (lambda: False)
+        self._has_phase_listener = on_phase_change is not None
+        self._on_phase_change = on_phase_change or (lambda _phase, _message=None: None)
         self._latest_creds: Optional[QwenCredentials] = None
 
     def _log(self, msg: str) -> None:
         self._on_step(msg)
+
+    def _set_phase(self, phase: str, message: Optional[str] = None) -> None:
+        self._on_phase_change(phase, message)
 
     def _resolve_browser_proxy(self) -> Optional[dict]:
         """Resolve Playwright proxy from env for browser automation."""
@@ -87,7 +98,12 @@ class QwenPortalRunner:
 
     def _browser_launch_options(self) -> dict:
         """Build Chromium launch options with optional proxy support."""
-        options = {"headless": self._headless}
+        headless = self._headless
+        if self._headless_requested and self._has_phase_listener:
+            headless = False
+            self._log("[Browser] 已启用人工验证支持，使用可见浏览器")
+
+        options = {"headless": headless}
         proxy = self._resolve_browser_proxy()
         if proxy:
             options["proxy"] = proxy
@@ -100,12 +116,50 @@ class QwenPortalRunner:
             self._log("[Browser] 未配置 Playwright 代理，直连访问")
         return options
 
+    def _page_body_text(self, page: Page) -> str:
+        try:
+            return (page.locator("body").inner_text(timeout=5000) or "").strip()
+        except Exception:
+            return ""
+
+    def _is_human_verification_page(self, page: Page) -> bool:
+        body_text = self._page_body_text(page).lower()
+        return any(token in body_text for token in self.HUMAN_VERIFICATION_TEXTS)
+
+    def _wait_for_human_verification(self, page: Page) -> bool:
+        if not self._is_human_verification_page(page):
+            return True
+
+        self._set_phase("waiting_human_verification")
+        self._log("[Portal] 检测到人工验证，请在浏览器窗口完成验证，完成后将自动继续")
+
+        while True:
+            if self._check_stop():
+                self._log("[Portal] 人工验证阶段收到停止请求，结束本轮流程")
+                return False
+
+            try:
+                if page.is_closed():
+                    self._log("[Portal] 人工验证过程中浏览器已关闭")
+                    return False
+            except Exception:
+                self._log("[Portal] 人工验证过程中浏览器状态不可用")
+                return False
+
+            if not self._is_human_verification_page(page):
+                self._set_phase("running")
+                self._log("[Portal] 人工验证已完成，继续执行")
+                return True
+
+            page.wait_for_timeout(1500)
+
     def run(self) -> bool:
         """Execute full flow. Returns True on success."""
         # 检查停止信号
         if self._check_stop():
             self._log("[Portal] 任务已被停止")
             return False
+        self._set_phase("running")
             
         mail_provider = get_email_provider(poll_interval=5.0, timeout=120.0)
         creds = QwenCredentials(
@@ -130,6 +184,8 @@ class QwenPortalRunner:
                     return False
                     
                 self._do_register(page, creds)
+                if not self._wait_for_human_verification(page):
+                    return False
                 self._log("4. 已提交注册，等待激活邮件...")
                 
                 if self._check_stop():

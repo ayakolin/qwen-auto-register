@@ -26,9 +26,12 @@ class FakeMailProvider:
 
 
 class FakePage:
-    def __init__(self):
+    def __init__(self, body_texts=None, closed=False):
         self.goto_calls = []
         self.url = ""
+        self.closed = closed
+        self._body_texts = list(body_texts or [])
+        self._body_index = 0
 
     def goto(self, url, **kwargs):
         self.url = url
@@ -36,6 +39,23 @@ class FakePage:
 
     def wait_for_timeout(self, timeout):
         self.last_timeout = timeout
+
+    def locator(self, selector):
+        if selector == "body":
+            return self
+        raise AssertionError(f"Unexpected selector: {selector}")
+
+    def inner_text(self, timeout=None):
+        if not self._body_texts:
+            return ""
+        index = min(self._body_index, len(self._body_texts) - 1)
+        value = self._body_texts[index]
+        if self._body_index < len(self._body_texts) - 1:
+            self._body_index += 1
+        return value
+
+    def is_closed(self):
+        return self.closed
 
 
 class FakeBrowser:
@@ -74,11 +94,11 @@ class FakePlaywright:
 
 
 class QwenPortalRunnerTests(unittest.TestCase):
-    def _run_with_fakes(self, append_account):
-        page = FakePage()
+    def _run_with_fakes(self, append_account, *, body_texts=None, check_stop=None):
+        page = FakePage(body_texts=body_texts)
         logs = []
-        remote_auth = Mock(return_value=True)
         provider = FakeMailProvider()
+        phases = []
         def fake_register(_self, _page, _creds):
             provider.events.append("register")
 
@@ -88,36 +108,112 @@ class QwenPortalRunnerTests(unittest.TestCase):
             qwen_portal, "append_account", append_account, create=True
         ), patch.object(qwen_portal.QwenPortalRunner, "_do_register", fake_register), patch.object(
             qwen_portal.QwenPortalRunner, "_browser_launch_options", lambda self: {"headless": True}
-        ), patch.object(
-            qwen_portal.QwenPortalRunner, "_run_remote_proxy_link_auth", remote_auth, create=True
         ):
-            runner = qwen_portal.QwenPortalRunner(headless=True, on_step=logs.append)
+            runner = qwen_portal.QwenPortalRunner(
+                headless=True,
+                on_step=logs.append,
+                check_stop=check_stop or (lambda: False),
+                on_phase_change=lambda phase, message=None: phases.append((phase, message)),
+            )
             ok = runner.run()
-        return ok, page, logs, remote_auth, provider
+        return ok, page, logs, provider, phases
 
     def test_activation_success_appends_local_account_and_finishes(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "accounts.txt"
             append_account = Mock(return_value=output_path)
 
-            ok, page, logs, remote_auth, provider = self._run_with_fakes(append_account)
+            ok, page, logs, provider, phases = self._run_with_fakes(
+                append_account,
+                body_texts=["The account is pending activation."],
+            )
 
         self.assertTrue(ok)
         append_account.assert_called_once_with("new@example.com", "Password123")
-        self.assertFalse(remote_auth.called)
         self.assertEqual(provider.events[:2], ["snapshot", "register"])
         self.assertEqual(provider.old_ids, {"old-mail"})
         self.assertIn("https://qwen.example.com/activate?token=ok", [call[0] for call in page.goto_calls])
+        self.assertIn(("running", None), phases)
         self.assertTrue(any("本地账号已保存" in line for line in logs))
 
     def test_writer_failure_returns_false(self):
         append_account = Mock(side_effect=OSError("disk full"))
 
-        ok, _page, logs, remote_auth, _provider = self._run_with_fakes(append_account)
+        ok, _page, logs, _provider, _phases = self._run_with_fakes(
+            append_account,
+            body_texts=["The account is pending activation."],
+        )
 
         self.assertFalse(ok)
-        self.assertFalse(remote_auth.called)
         self.assertTrue(any("本地账号写入失败" in line for line in logs))
+
+    def test_human_verification_phase_waits_then_resumes(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "accounts.txt"
+            append_account = Mock(return_value=output_path)
+
+            ok, _page, logs, provider, phases = self._run_with_fakes(
+                append_account,
+                body_texts=[
+                    "Access Verification Please complete the operation to verify that you are a real person",
+                    "The account is pending activation. Please activate your account through the verification email in your inbox.",
+                ],
+            )
+
+        self.assertTrue(ok)
+        self.assertIn(("waiting_human_verification", None), phases)
+        self.assertGreaterEqual(phases.count(("running", None)), 2)
+        self.assertEqual(provider.events[-1], "wait")
+        self.assertTrue(any("人工验证" in line for line in logs))
+
+    def test_human_verification_stop_returns_false(self):
+        append_account = Mock()
+        checks = iter([False, False, True])
+
+        ok, _page, logs, provider, phases = self._run_with_fakes(
+            append_account,
+            body_texts=[
+                "Access Verification Please complete the operation to verify that you are a real person",
+                "Access Verification Please complete the operation to verify that you are a real person",
+            ],
+            check_stop=lambda: next(checks),
+        )
+
+        self.assertFalse(ok)
+        self.assertIn(("waiting_human_verification", None), phases)
+        self.assertNotIn("wait", provider.events)
+        self.assertTrue(any("停止" in line for line in logs))
+
+    def test_human_verification_closed_page_returns_false(self):
+        append_account = Mock()
+        page = FakePage(
+            body_texts=["Access Verification Please complete the operation to verify that you are a real person"],
+            closed=True,
+        )
+        logs = []
+        provider = FakeMailProvider()
+        phases = []
+
+        def fake_register(_self, _page, _creds):
+            provider.events.append("register")
+
+        with patch.object(qwen_portal, "get_email_provider", return_value=provider), patch.object(
+            qwen_portal, "sync_playwright", return_value=FakePlaywright(page)
+        ), patch.object(qwen_portal, "_generate_password", return_value="Password123"), patch.object(
+            qwen_portal, "append_account", append_account, create=True
+        ), patch.object(qwen_portal.QwenPortalRunner, "_do_register", fake_register), patch.object(
+            qwen_portal.QwenPortalRunner, "_browser_launch_options", lambda self: {"headless": True}
+        ):
+            runner = qwen_portal.QwenPortalRunner(
+                headless=True,
+                on_step=logs.append,
+                on_phase_change=lambda phase, message=None: phases.append((phase, message)),
+            )
+            ok = runner.run()
+
+        self.assertFalse(ok)
+        self.assertIn(("waiting_human_verification", None), phases)
+        self.assertNotIn("wait", provider.events)
 
 
 if __name__ == "__main__":

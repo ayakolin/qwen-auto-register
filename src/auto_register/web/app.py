@@ -38,6 +38,8 @@ class RuntimeState:
         self.finished_at: Optional[str] = None
         self.logs: list[str] = []
         self.stop_requested = False
+        self.phase = "idle"
+        self.phase_message: Optional[str] = None
 
     def _now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -62,7 +64,14 @@ class RuntimeState:
             self.finished_at = None
             self.logs = []
             self.stop_requested = False
+            self.phase = "running"
+            self.phase_message = None
             return self.run_id
+
+    def set_phase(self, phase: str, message: Optional[str] = None) -> None:
+        with self._lock:
+            self.phase = phase
+            self.phase_message = message
 
     def finish_run(self, ok: bool, error: Optional[str]) -> None:
         with self._lock:
@@ -70,12 +79,16 @@ class RuntimeState:
             self.success = ok
             self.error = error
             self.finished_at = self._now_iso()
+            self.phase = "success" if ok else "error"
+            self.phase_message = error
 
     def request_stop(self) -> bool:
         with self._lock:
             if not self.running:
                 return False
             self.stop_requested = True
+            self.phase = "stopped"
+            self.phase_message = "用户已请求停止"
             return True
 
     def snapshot(self, tail: int = 300) -> dict:
@@ -88,6 +101,8 @@ class RuntimeState:
                 "started_at": self.started_at,
                 "finished_at": self.finished_at,
                 "stop_requested": self.stop_requested,
+                "phase": self.phase,
+                "phase_message": self.phase_message,
                 "logs": self.logs[-tail:],
             }
 
@@ -142,7 +157,8 @@ def _run_flow(run_id: int, req: StartRequest) -> None:
                         runner = QwenPortalRunner(
                             headless=req.headless, 
                             on_step=STATE.append_log,
-                            check_stop=lambda: STATE.stop_requested
+                            check_stop=lambda: STATE.stop_requested,
+                            on_phase_change=STATE.set_phase,
                         )
                         result["ok"] = runner.run()
                     except Exception as e:
@@ -319,6 +335,46 @@ def create_app() -> FastAPI:
             50% { opacity: 0.5; }
         }
         .status-text { flex: 1; color: #555; }
+        .verification-overlay {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(4px);
+            z-index: 1001;
+        }
+        .verification-overlay.active { display: flex; }
+        .verification-dialog {
+            width: min(560px, 100%);
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 24px;
+        }
+        .verification-dialog h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #111827;
+        }
+        .verification-dialog p {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        .verification-dialog code {
+            display: block;
+            background: #111827;
+            color: #f9fafb;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
         .logs-container {
             flex: 1;
             overflow: hidden;
@@ -350,6 +406,14 @@ def create_app() -> FastAPI:
 </head>
 <body>
     <div class="container">
+        <div class="verification-overlay" id="verificationOverlay">
+            <div class="verification-dialog">
+                <h2>等待人工验证</h2>
+                <p id="verificationMessage">请在浏览器窗口完成真人校验，完成后流程会自动继续。</p>
+                <code id="verificationLogs">等待状态更新...</code>
+            </div>
+        </div>
+
         <div class="header">
             <h1>🚀 AutoRegister 控制台 <span style="font-size: 14px; opacity: 0.6; vertical-align: middle;">Worker Mail</span></h1>
             <p>一键自动注册、邮箱激活并保存本地账号</p>
@@ -417,6 +481,9 @@ def create_app() -> FastAPI:
             const logsDiv = document.getElementById('logs');
             const headless = document.getElementById('headless');
             const loopCount = document.getElementById('loopCount');
+            const verificationOverlay = document.getElementById('verificationOverlay');
+            const verificationMessage = document.getElementById('verificationMessage');
+            const verificationLogs = document.getElementById('verificationLogs');
 
             // 代理配置 UI - 确保都存在
             const proxyModal = document.getElementById('proxyModal');
@@ -432,7 +499,10 @@ def create_app() -> FastAPI:
             let currentRunId = 0;
 
             function hasCoreElements() {
-                const hasCore = !!(btnStart && btnStop && statusIcon && statusText && logsDiv && headless && loopCount);
+                const hasCore = !!(
+                    btnStart && btnStop && statusIcon && statusText && logsDiv && headless &&
+                    loopCount && verificationOverlay && verificationMessage && verificationLogs
+                );
                 const hasProxy = !!(proxyModal && proxyServer && proxyUsername && proxyPassword && proxyBypass && btnProxySave && btnProxyCancel && btnProxyClear);
                 if (!hasCore || !hasProxy) {
                     console.error('缺少 DOM 元素：', { hasCore, hasProxy });
@@ -535,13 +605,34 @@ def create_app() -> FastAPI:
                 logsDiv.textContent = '等待启动...';
             }
 
+            function setVerificationOverlay(visible, message = '', logs = []) {
+                verificationOverlay.classList.toggle('active', visible);
+                if (!visible) {
+                    verificationMessage.textContent = '请在浏览器窗口完成真人校验，完成后流程会自动继续。';
+                    verificationLogs.textContent = '等待状态更新...';
+                    return;
+                }
+
+                verificationMessage.textContent = message || '请在浏览器窗口完成真人校验，完成后流程会自动继续。';
+                verificationLogs.textContent = logs.slice(-5).join('\n') || '等待日志更新...';
+            }
+
             async function updateStatus() {
                 try {
                     const res = await fetch('/api/status');
                     const data = await res.json();
+                    const phase = data.phase || 'idle';
+                    const phaseMessage = data.phase_message || '';
+                    const logs = data.logs || [];
                     
                     if (data.running) {
-                        setStatus(`运行中 (ID: ${data.run_id})`, 'running');
+                        if (phase === 'waiting_human_verification') {
+                            setStatus(`等待人工验证 (ID: ${data.run_id})`, 'running');
+                            setVerificationOverlay(true, phaseMessage, logs);
+                        } else {
+                            setStatus(`运行中 (ID: ${data.run_id})`, 'running');
+                            setVerificationOverlay(false);
+                        }
                         isRunning = true;
                         btnStart.disabled = true;
                         btnStop.disabled = false;
@@ -551,6 +642,7 @@ def create_app() -> FastAPI:
                         btnStop.disabled = true;
                         btnConfigProxy.disabled = false;
                         isRunning = false;
+                        setVerificationOverlay(false);
                         
                         if (data.success === true) {
                             setStatus(`✓ 已完成 (ID: ${data.run_id})`, 'success');
@@ -562,7 +654,6 @@ def create_app() -> FastAPI:
                     }
 
                     // 更新日志
-                    const logs = data.logs || [];
                     if (logs.length > 0) {
                         logsDiv.innerHTML = '';
                         logs.forEach(logLine => {
