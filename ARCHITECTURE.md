@@ -1,11 +1,12 @@
-﻿# qwen-auto-register 代码结构说明
+# qwen-auto-register 代码结构说明
 
-本文档描述当前精简版架构（已将历史无关模块归档）。
+本文档描述当前精简版架构：自动注册 Qwen 账号，完成邮箱激活后，将账号密码保存到本地文本文件。
 
 ## 1. 当前目录结构
 
 ```text
 qwen-auto-register/
+├── config.json
 ├── README.md
 ├── ARCHITECTURE.md
 ├── Dockerfile
@@ -14,10 +15,11 @@ qwen-auto-register/
 │   └── start.ps1
 └── src/
     └── auto_register/
+        ├── config.py
         ├── main.py
-    ├── web/
-    │   ├── __init__.py
-    │   └── app.py
+        ├── web/
+        │   ├── __init__.py
+        │   └── app.py
         ├── gui/
         │   ├── app.py
         │   └── log_panel.py
@@ -28,27 +30,21 @@ qwen-auto-register/
         │   ├── qwen_portal.py
         │   ├── cli_proxy_management_client.py
         │   └── ARCHIVED_LEGACY.md
-        ├── utils/
-        │   └── ARCHIVED_LEGACY.md
         ├── writer/
+        │   ├── accounts_writer.py
         │   └── ARCHIVED_LEGACY.md
         └── archive/
             ├── README.md
             └── legacy/
-                ├── integrations/qwen_oauth_client.py
-                ├── utils/cpa_push.py
-                ├── utils/gateway.py
-                ├── utils/token_utils.py
-                └── writer/auth_profiles_writer.py
 ```
+
+`cli_proxy_management_client.py` 仍在源码中保留，但当前活动流程不再调用远程 CLI Proxy API。
 
 ## 2. 当前活动流程
 
 1. 自动注册
 2. 自动激活
-3. 请求远程管理 API 获取登录链接
-4. 打开登录链接并轮询远程认证状态
-5. 认证文件由远程 CLI Proxy API 维护
+3. 本地保存 `email:password`
 
 ```mermaid
 flowchart TD
@@ -59,48 +55,59 @@ flowchart TD
   D --> E
   E --> F[QwenPortalRunner.run]
   F --> G[生成用户名和密码]
-  G --> H[邮箱 Provider 生成临时邮箱]
+  G --> H[Cloudflare Worker 创建临时邮箱]
   H --> I[Playwright 注册]
-  I --> J[轮询邮箱获取激活链接]
-  J --> K[打开激活链接]
-  K --> L[调用 /v0/management/qwen-auth-url]
-  L --> M[打开登录链接]
-  M --> N[轮询 /v0/management/get-auth-status]
-  N --> O{status}
-  O -->|ok| P[流程完成]
-  O -->|error/timeout| Q[流程失败]
+  I --> J[Worker 拉信并轮询新邮件]
+  J --> K[提取并打开激活链接]
+  K --> L[追加写入 accounts.txt]
+  L --> M[流程完成]
 ```
 
 ## 3. 核心模块职责
 
-- src/auto_register/integrations/qwen_portal.py
-  - 主编排器：注册、激活、远程链接认证。
+- `src/auto_register/config.py`
+  - 读取当前项目根目录 `config.json`，提供 Worker 邮箱与本地账号输出配置。
 
-- src/auto_register/integrations/cli_proxy_management_client.py
-  - 远程管理 API 客户端：qwen-auth-url、get-auth-status、auth-files。
+- `src/auto_register/integrations/qwen_portal.py`
+  - 主编排器：注册、等待激活邮件、打开激活链接、保存本地账号。
 
-- src/auto_register/providers/one_sec_mail_provider.py
-  - 临时邮箱适配（Mail.tm / 1secMail / Cloud Mail）。
+- `src/auto_register/providers/one_sec_mail_provider.py`
+  - Cloudflare Worker 邮箱适配：创建临时邮箱、拉取邮件、按快照轮询新邮件、提取激活链接。
 
-- src/auto_register/providers/username_provider.py
+- `src/auto_register/writer/accounts_writer.py`
+  - 将激活成功的 `email:password` 追加写入本地文本文件。
+
+- `src/auto_register/providers/username_provider.py`
   - 随机用户名生成。
 
-- src/auto_register/web/app.py
-  - Web 控制台：启动任务、查看实时日志、查看运行状态。
+- `src/auto_register/web/app.py`
+  - Web 控制台：启动任务、停止任务、查看实时日志和运行状态。
 
-## 4. 归档策略
+## 4. 关键配置
 
-已移除活动调用但保留源码的模块统一放在：
+当前项目使用 `config.json` 配置 Worker 邮箱和账号输出：
 
-- src/auto_register/archive/legacy/
-
-原目录保留 ARCHIVED_LEGACY.md 指向归档位置，便于后续追溯和按需恢复。
-
-## 5. 关键环境变量
-
-```dotenv
-QWEN_AUTH_MODE=cli-proxy-api-remote
-CLI_PROXY_API_BASE_URL=http://server:8056
-CLI_PROXY_API_KEY=your-management-key
-AUTO_REGISTER_EMAIL_PROVIDER=mailtm|1secmail|cloudflare
+```json
+{
+  "cf_worker_domain": "mail.example.com",
+  "cf_email_domain": [
+    "example.com"
+  ],
+  "cf_admin_password": "replace-with-admin-password",
+  "cf_enable_random_subdomain": true,
+  "accounts_file": "accounts.txt"
+}
 ```
+
+`.env` 继续用于 UI 模式、端口和浏览器代理等运行时配置。
+
+## 5. 非活动链路
+
+以下能力已从当前活动流程中移除或归档：
+
+- 远程 CLI Proxy API 登录链接认证
+- CPA 上传
+- 本地 OAuth 认证文件写入
+- LuckMail
+- Outlook 邮箱池
+- Mail.tm / 1secMail

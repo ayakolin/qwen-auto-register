@@ -1,4 +1,4 @@
-"""Qwen registration + activation runner with remote auth-link handoff."""
+"""Qwen registration + activation runner with local account persistence."""
 
 import os
 import string
@@ -7,9 +7,9 @@ from typing import Callable, Optional
 
 from playwright.sync_api import Page, sync_playwright
 
-from .cli_proxy_management_client import get_qwen_auth_url, list_auth_files, poll_auth_status
 from ..providers.one_sec_mail_provider import get_email_provider
 from ..providers.username_provider import UsernameProvider
+from ..writer.accounts_writer import append_account
 
 
 @dataclass
@@ -36,18 +36,9 @@ def _generate_password(length: int = 14) -> str:
 
 
 class QwenPortalRunner:
-    """Run simplified flow: register -> activate -> remote auth-link handoff."""
+    """Run simplified flow: register -> activate -> append local account."""
 
     REGISTER_URL = "https://chat.qwen.ai/auth?mode=register"
-
-    PROXY_LINK_AUTH_MODES = (
-        "cli-proxy-api-remote",
-        "cli_proxy_api_remote",
-        "proxy-link",
-        "proxy_link",
-        "management-api",
-        "management_api",
-    )
 
     def __init__(
         self,
@@ -62,20 +53,6 @@ class QwenPortalRunner:
 
     def _log(self, msg: str) -> None:
         self._on_step(msg)
-
-    def _current_url(self, page: Page) -> str:
-        """Return current page URL for diagnostics."""
-        try:
-            return page.url or "<empty-url>"
-        except Exception:
-            return "<unknown-url>"
-
-    def _auth_mode(self) -> str:
-        return (
-            os.environ.get("QWEN_AUTH_MODE")
-            or os.environ.get("AUTO_REGISTER_AUTH_MODE")
-            or "cli-proxy-api-remote"
-        ).strip().lower()
 
     def _resolve_browser_proxy(self) -> Optional[dict]:
         """Resolve Playwright proxy from env for browser automation."""
@@ -139,6 +116,7 @@ class QwenPortalRunner:
         self._latest_creds = creds
         self._log(f"1. 临时邮箱: {creds.email}")
         self._log(f"2. 随机密码已生成")
+        old_mail_ids = mail_provider.collect_mailbox_snapshot()
 
         with sync_playwright() as p:
             browser = p.chromium.launch(**self._browser_launch_options())
@@ -158,7 +136,11 @@ class QwenPortalRunner:
                     self._log("[Portal] 在等待邮件前收到停止请求，放弃此次注册")
                     return False
                     
-                activation_url = mail_provider.wait_for_activation_link(creds.email, check_stop=self._check_stop)
+                activation_url = mail_provider.wait_for_activation_link(
+                    creds.email,
+                    check_stop=self._check_stop,
+                    old_ids=old_mail_ids,
+                )
                 if not activation_url:
                     self._log("[Portal] 等待邮件时收到停止请求或超时")
                     return False
@@ -172,161 +154,21 @@ class QwenPortalRunner:
                 page.goto(activation_url, wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(3000)
                 self._log("6. 已打开激活链接")
-                mode = self._auth_mode()
-                self._log(f"7. 当前认证模式: {mode}")
-                if mode not in self.PROXY_LINK_AUTH_MODES:
-                    self._log(
-                        f"7. 模式 {mode} 不在远程链接模式列表中，按当前项目默认强制切换到 cli-proxy-api-remote"
-                    )
 
-                if self._check_stop():
-                    self._log("[Portal] 在启动认证前收到停止请求，放弃此次注册")
+                try:
+                    accounts_path = append_account(creds.email, creds.password)
+                except Exception as e:
+                    self._log(f"7. 本地账号写入失败: {e}")
                     return False
-                    
-                self._log("8. 启动远程管理 API 登录链接流程...")
-                ok = self._run_remote_proxy_link_auth(page, creds)
-                if ok:
-                    self._log("9. 远程认证流程完成（由 CLI Proxy API 侧维护认证文件）")
-                    return True
-                self._log("9. 远程认证流程失败")
-                return False
+
+                self._log(f"7. 本地账号已保存: {accounts_path}")
+                self._log("8. 注册激活流程完成")
+                return True
             except Exception as e:
                 self._log(f"错误: {e}")
                 raise
             finally:
                 browser.close()
-
-    def _run_remote_proxy_link_auth(self, page: Page, creds: QwenCredentials) -> bool:
-        """Use CLI Proxy management API to get auth URL and complete remote flow."""
-        base_url = (os.environ.get("CLI_PROXY_API_BASE_URL") or "").strip()
-        management_key = (os.environ.get("CLI_PROXY_API_KEY") or "").strip()
-        if not base_url or not management_key:
-            self._log("[ProxyLink] 缺少 CLI_PROXY_API_BASE_URL 或 CLI_PROXY_API_KEY")
-            return False
-
-        try:
-            auth_url, state = get_qwen_auth_url(base_url=base_url, management_key=management_key)
-        except Exception as e:
-            self._log(f"[ProxyLink] 获取登录链接失败: {e}")
-            return False
-
-        self._log(f"[ProxyLink] 获取登录链接成功，state={state}")
-        page.goto(auth_url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(1500)
-        self._log(f"[ProxyLink] 已打开登录链接，当前页面: {self._current_url(page)}")
-
-        self._log(f"[ProxyLink] 使用本次注册凭据执行登录: {creds.email}")
-        if self._check_stop():
-            self._log("[ProxyLink] 收到停止请求，退出")
-            return False
-            
-        self._complete_two_stage_auth(page, creds)
-
-        def on_wait() -> None:
-            self._log("[ProxyLink] 等待远程认证完成...")
-
-        ok, err = poll_auth_status(
-            base_url=base_url,
-            management_key=management_key,
-            state=state,
-            poll_interval=2.0,
-            timeout_seconds=300.0,
-            on_wait=on_wait,
-            check_stop=self._check_stop,
-        )
-        if not ok:
-            self._log(f"[ProxyLink] 认证状态失败: {err}")
-            return False
-
-        # 仅用于观测，不做本地写入。
-        try:
-            files = list_auth_files(base_url=base_url, management_key=management_key)
-            qwen_count = len([f for f in files if str((f or {}).get("provider") or "").lower() == "qwen"])
-            self._log(f"[ProxyLink] 远端可见 qwen 认证文件数: {qwen_count}")
-        except Exception as e:
-            self._log(f"[ProxyLink] 读取远端认证文件列表失败（可忽略）: {e}")
-
-        return True
-
-    def _complete_two_stage_auth(self, page: Page, creds: QwenCredentials) -> None:
-        """Handle common two-stage flow: login form -> confirmation page."""
-        login_submitted = False
-        confirm_clicked = False
-        max_rounds = 8
-
-        for round_idx in range(1, max_rounds + 1):
-            if self._check_stop():
-                self._log("[ProxyLink] 收到停止请求，放弃两阶段认证")
-                return
-                
-            self._log(
-                f"[ProxyLink][Round {round_idx}/{max_rounds}] 检查登录与确认页面，URL={self._current_url(page)}"
-            )
-            if not login_submitted:
-                login_submitted = self._try_login_on_auth_page(page, creds, round_idx)
-            else:
-                self._log(f"[ProxyLink][Round {round_idx}] 登录步骤已完成，跳过重复登录")
-
-            if self._auto_click_auth_action(page, round_idx):
-                confirm_clicked = True
-                break
-
-            self._log(f"[ProxyLink][Round {round_idx}] 未点击到确认按钮，等待页面更新后重试")
-
-            try:
-                page.wait_for_load_state("domcontentloaded", timeout=5000)
-            except Exception:
-                pass
-            page.wait_for_timeout(1500)
-
-        if login_submitted:
-            self._log("[ProxyLink] 第一阶段登录表单已提交")
-        else:
-            self._log("[ProxyLink] 未检测到登录表单，可能已登录或页面已跳过该步骤")
-
-        if confirm_clicked:
-            self._log("[ProxyLink] 第二阶段确认按钮已点击")
-        else:
-            self._log("[ProxyLink] 未检测到确认按钮，继续轮询远程状态")
-
-    def _try_login_on_auth_page(self, page: Page, creds: QwenCredentials, round_idx: int) -> bool:
-        """Try login for auth-link page and return whether submit happened."""
-        try:
-            email_input = page.locator(
-                'input[type="email"], input[name="email"], input[placeholder*="邮箱"], input[placeholder*="电子邮箱"]'
-            ).first
-            if email_input.count() <= 0 or not email_input.is_visible():
-                self._log(f"[ProxyLink][Round {round_idx}] 未检测到可见邮箱输入框")
-                return False
-
-            self._log(f"[ProxyLink][Round {round_idx}] 检测到邮箱输入框，开始填入注册邮箱")
-            email_input.fill(creds.email)
-
-            pw_input = page.locator(
-                'input[type="password"], input[name="password"], input[placeholder*="密码"]'
-            ).first
-            if pw_input.count() > 0 and pw_input.is_visible():
-                pw_input.fill(creds.password)
-                self._log(f"[ProxyLink][Round {round_idx}] 已填入密码（长度={len(creds.password)}）")
-            else:
-                self._log(f"[ProxyLink][Round {round_idx}] 未检测到可见密码输入框")
-
-            submit = page.locator(
-                'button[type="submit"], button:has-text("登录"), button:has-text("Login"), button:has-text("继续"), button:has-text("Continue")'
-            ).first
-            if submit.count() > 0 and submit.is_visible():
-                submit.click()
-                page.wait_for_timeout(2000)
-                self._log(f"[ProxyLink][Round {round_idx}] 已提交登录表单")
-                return True
-
-            self._log(f"[ProxyLink][Round {round_idx}] 未找到可点击的登录按钮")
-        except Exception:
-            # Best-effort only; ignore form mismatch.
-            self._log(f"[ProxyLink][Round {round_idx}] 登录步骤异常，继续重试")
-            return False
-
-        return False
 
     def _do_register(self, page: Page, creds: QwenCredentials) -> None:
         """Fill and submit registration form."""
@@ -388,62 +230,3 @@ class QwenPortalRunner:
         )
         submit.click()
         page.wait_for_timeout(3000)
-
-    def _auto_click_auth_action(self, page: Page, round_idx: int) -> bool:
-        """Best-effort click for common approval/confirm buttons on auth page."""
-        try:
-            page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
-            pass
-        page.wait_for_timeout(1000)
-
-        selectors = [
-            'button:has-text("同意")',
-            'button:has-text("授权")',
-            'button:has-text("允许")',
-            'button:has-text("确认")',
-            'button:has-text("Approve")',
-            'button:has-text("Authorize")',
-            'button:has-text("Allow")',
-            'button:has-text("Continue")',
-            'a:has-text("同意")',
-            'a:has-text("授权")',
-            'a:has-text("允许")',
-            '[role="button"]:has-text("同意")',
-            '[role="button"]:has-text("授权")',
-            '[data-testid="approve"]',
-            'button[type="submit"]',
-            'input[type="submit"]',
-            'div[class*="primary"]:has-text("同意")',
-            'div[class*="submit"]:has-text("同意")',
-        ]
-        for sel in selectors:
-            try:
-                btn = page.locator(sel).first
-                if btn.count() > 0 and btn.is_visible(timeout=500):
-                    btn.click()
-                    self._log(f"[ProxyLink][Round {round_idx}] 已自动点击授权按钮，selector={sel}")
-                    page.wait_for_timeout(2000)
-                    return True
-            except Exception:
-                continue
-
-        clicked = page.evaluate("""() => {
-            const texts = ['同意', '授权', '允许', 'Approve', 'Authorize', 'Allow', '确认'];
-            const nodes = document.querySelectorAll('button, a, [role="button"], input[type="submit"]');
-            for (const el of nodes) {
-                const t = (el.textContent || '').trim();
-                if (texts.some(x => t.includes(x))) {
-                    el.click();
-                    return true;
-                }
-            }
-            return false;
-        }""")
-        if clicked:
-            self._log(f"[ProxyLink][Round {round_idx}] 已自动点击授权按钮（JS 文本查找）")
-            page.wait_for_timeout(2000)
-            return True
-
-        self._log(f"[ProxyLink][Round {round_idx}] 当前页面未匹配到确认/授权按钮")
-        return False

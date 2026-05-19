@@ -1,15 +1,13 @@
-"""Variable providers for email, username, password."""
+"""Variable providers for email and username."""
 
 from .one_sec_mail_provider import (
-    MailTmProvider,
-    OneSecMailProvider,
+    CloudflareWorkerMailProvider,
     get_email_provider,
 )
 from .username_provider import UsernameProvider
 
 __all__ = [
-    "MailTmProvider",
-    "OneSecMailProvider",
+    "CloudflareWorkerMailProvider",
     "UsernameProvider",
     "get_email_provider",
 ]

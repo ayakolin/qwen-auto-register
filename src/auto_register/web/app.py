@@ -18,7 +18,6 @@ class StartRequest(BaseModel):
     """Run options from web UI."""
 
     headless: bool = False
-    email_provider: Optional[str] = None
     loop_count: int = 1
     proxy_server: Optional[str] = None
     proxy_username: Optional[str] = None
@@ -99,11 +98,6 @@ STATE = RuntimeState()
 def _run_flow(run_id: int, req: StartRequest) -> None:
     """Background task wrapper for running QwenPortalRunner with loop support."""
     try:
-        # 应用邮箱提供商
-        if req.email_provider:
-            os.environ["AUTO_REGISTER_EMAIL_PROVIDER"] = req.email_provider.strip()
-            STATE.append_log(f"[Web] 已设置邮箱提供方: {req.email_provider.strip()}")
-
         # 应用代理配置
         if req.proxy_server:
             os.environ["QWEN_PLAYWRIGHT_PROXY"] = req.proxy_server.strip()
@@ -357,19 +351,11 @@ def create_app() -> FastAPI:
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 AutoRegister 控制台 <span style="font-size: 14px; opacity: 0.6; vertical-align: middle;">v2.9.0-CPA</span></h1>
-            <p>一键自动注册、激活、认证 Qwen账户</p>
+            <h1>🚀 AutoRegister 控制台 <span style="font-size: 14px; opacity: 0.6; vertical-align: middle;">Worker Mail</span></h1>
+            <p>一键自动注册、邮箱激活并保存本地账号</p>
         </div>
 
         <div class="controls">
-            <div class="control-group">
-                <label for="provider">邮箱:</label>
-                <select id="provider">
-                    <option value="cloudflare">Cloudflare</option>
-                    <option value="mailtm">MailTM</option>
-                    <option value="1secmail">1SecMail</option>
-                </select>
-            </div>
             <div class="control-group">
                 <label for="loopCount">循环次数:</label>
                 <input type="number" id="loopCount" min="1" max="100" value="1" style="width: 60px; padding: 6px; border: 1px solid #ddd; border-radius: 6px;">
@@ -429,7 +415,6 @@ def create_app() -> FastAPI:
             const statusIcon = document.getElementById('statusIcon');
             const statusText = document.getElementById('statusText');
             const logsDiv = document.getElementById('logs');
-            const provider = document.getElementById('provider');
             const headless = document.getElementById('headless');
             const loopCount = document.getElementById('loopCount');
 
@@ -447,7 +432,7 @@ def create_app() -> FastAPI:
             let currentRunId = 0;
 
             function hasCoreElements() {
-                const hasCore = !!(btnStart && btnStop && statusIcon && statusText && logsDiv && provider && headless && loopCount);
+                const hasCore = !!(btnStart && btnStop && statusIcon && statusText && logsDiv && headless && loopCount);
                 const hasProxy = !!(proxyModal && proxyServer && proxyUsername && proxyPassword && proxyBypass && btnProxySave && btnProxyCancel && btnProxyClear);
                 if (!hasCore || !hasProxy) {
                     console.error('缺少 DOM 元素：', { hasCore, hasProxy });
@@ -627,7 +612,6 @@ def create_app() -> FastAPI:
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             headless: headless.checked,
-                            email_provider: provider.value || null,
                             loop_count: parseInt(loopCount.value) || 1,
                             proxy_server: proxyConfig.server || null,
                             proxy_username: proxyConfig.username || null,
@@ -720,7 +704,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/start")
     def start_get(headless: int = 0, email_provider: str = "") -> dict:
-        req = StartRequest(headless=bool(headless), email_provider=(email_provider or None))
+        req = StartRequest(headless=bool(headless))
         try:
             run_id = STATE.start_run()
         except RuntimeError:
