@@ -1,6 +1,5 @@
-"""Writer package placeholder.
+"""Local writer helpers."""
 
-Legacy auth profile writer has been moved to archive/legacy.
-"""
+from .accounts_writer import append_account
 
-__all__: list[str] = []
+__all__ = ["append_account"]
