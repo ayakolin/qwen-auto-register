@@ -1,6 +1,5 @@
-"""Main GUI application for Qwen Token acquisition."""
+"""Main GUI application for Qwen account registration."""
 
-import os
 import threading
 from typing import Optional
 
@@ -24,7 +23,7 @@ class App(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("AutoRegister - Qwen Token 自动获取")
+        self.title("AutoRegister - Qwen 注册激活")
         self.geometry("700x500")
         self.minsize(500, 400)
 
@@ -35,14 +34,14 @@ class App(ctk.CTk):
         # Header
         header = ctk.CTkLabel(
             self,
-            text="Qwen Token 自动获取",
+            text="Qwen 注册激活",
             font=ctk.CTkFont(size=20, weight="bold"),
         )
         header.pack(pady=(15, 5))
 
         desc = ctk.CTkLabel(
             self,
-            text="注册 → 激活 → 远程登录链接认证（CLI Proxy API）",
+            text="注册 → 激活 → 本地保存账号",
             font=ctk.CTkFont(size=12),
             text_color="gray",
         )
@@ -51,26 +50,6 @@ class App(ctk.CTk):
         # Controls
         ctrl = ctk.CTkFrame(self, fg_color="transparent")
         ctrl.pack(fill="x", padx=20, pady=(0, 10))
-
-        # Email provider select
-        provider_frame = ctk.CTkFrame(ctrl, fg_color="transparent")
-        provider_frame.pack(side="left", padx=(0, 15))
-
-        provider_label = ctk.CTkLabel(provider_frame, text="临时邮箱")
-        provider_label.pack(side="left", padx=(0, 8))
-
-        # Env: AUTO_REGISTER_EMAIL_PROVIDER = "mailtm" | "1secmail" | "cloudflare"
-        default_provider = os.environ.get("AUTO_REGISTER_EMAIL_PROVIDER", "mailtm").lower().strip() or "mailtm"
-        if default_provider not in ("mailtm", "1secmail", "cloudflare"):
-            default_provider = "mailtm"
-        self._email_provider_var = ctk.StringVar(value=default_provider)
-        provider_menu = ctk.CTkOptionMenu(
-            provider_frame,
-            values=["mailtm", "1secmail", "cloudflare"],
-            variable=self._email_provider_var,
-            width=120,
-        )
-        provider_menu.pack(side="left")
 
         self._headless_var = ctk.BooleanVar(value=False)
         headless_cb = ctk.CTkCheckBox(
@@ -142,12 +121,10 @@ class App(ctk.CTk):
         if self._running:
             return
         self._running = True
-        # Apply provider selection to current process (used by providers.get_email_provider).
-        os.environ["AUTO_REGISTER_EMAIL_PROVIDER"] = (self._email_provider_var.get() or "mailtm").strip()
         self._start_btn.configure(state="disabled")
         self._stop_btn.configure(state="normal")
         self._log.clear()
-        self._log.append("开始执行 Qwen Token 获取流程...")
+        self._log.append("开始执行 Qwen 注册激活流程...")
         thread = threading.Thread(target=self._run_flow, daemon=True)
         thread.start()
 
