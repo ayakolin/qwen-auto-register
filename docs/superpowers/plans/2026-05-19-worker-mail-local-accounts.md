@@ -34,7 +34,7 @@ Create `src/auto_register/config.py` with:
 - `project_root() -> Path`
 - `load_config(path: Path | None = None) -> dict[str, Any]`
 - `load_worker_mail_config(path: Path | None = None) -> WorkerMailConfig`
-- `WorkerMailConfig` dataclass containing `cf_worker_domain`, `cf_email_domain`, `cf_admin_password`, `cf_enable_random_subdomain`, `accounts_file`
+- `WorkerMailConfig` dataclass containing `cf_worker_domain`, `cf_email_domain`, `cf_admin_password`, `cf_enable_random_subdomain`
 
 - [ ] **Step 4: Add placeholder config**
 
@@ -103,7 +103,7 @@ Expected: FAIL because `accounts_writer.py` does not exist.
 
 Create `append_account(email: str, password: str, path: str | Path | None = None) -> Path`.
 
-When `path` is omitted, load `accounts_file` from `config.json`. Always append exactly one `email:password\n` line.
+When `path` is omitted, write to the project-root `accounts.txt`. Always append exactly one `email:password\n` line.
 
 - [ ] **Step 4: Run writer tests**
 

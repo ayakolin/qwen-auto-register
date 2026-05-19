@@ -69,7 +69,7 @@ docker compose down
 
 ### Worker 邮箱与账号输出
 
-当前项目使用根目录 `config.json` 维护邮箱和本地输出配置，字段名与 `codexoauthloop` 的 Cloudflare Worker 邮箱字段保持一致：
+当前项目使用根目录 `config.json` 维护邮箱配置，字段名与 `codexoauthloop` 的 Cloudflare Worker 邮箱字段保持一致：
 
 ```json
 {
@@ -78,8 +78,7 @@ docker compose down
     "example.com"
   ],
   "cf_admin_password": "replace-with-admin-password",
-  "cf_enable_random_subdomain": true,
-  "accounts_file": "accounts.txt"
+  "cf_enable_random_subdomain": true
 }
 ```
 
@@ -89,7 +88,8 @@ docker compose down
 - `cf_email_domain`：可创建邮箱的域名列表。
 - `cf_admin_password`：Worker `/admin/new_address` 使用的管理密码。
 - `cf_enable_random_subdomain`：创建邮箱时是否启用随机子域。
-- `accounts_file`：激活成功后追加写入的本地账号文件。
+
+注册激活成功后，账号统一追加写入项目根目录 `accounts.txt`。
 
 输出格式：
 

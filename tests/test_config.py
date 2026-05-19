@@ -17,7 +17,6 @@ class ConfigTests(unittest.TestCase):
                         "cf_email_domain": ["example.com", "example.net"],
                         "cf_admin_password": "secret",
                         "cf_enable_random_subdomain": False,
-                        "accounts_file": "out/accounts.txt",
                     }
                 ),
                 encoding="utf-8",
@@ -29,7 +28,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.cf_email_domain, ("example.com", "example.net"))
         self.assertEqual(config.cf_admin_password, "secret")
         self.assertFalse(config.cf_enable_random_subdomain)
-        self.assertEqual(config.accounts_file, Path(tmp_dir) / "out/accounts.txt")
 
     def test_load_worker_mail_config_rejects_missing_required_field(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -39,7 +37,6 @@ class ConfigTests(unittest.TestCase):
                     {
                         "cf_worker_domain": "mail.example.com",
                         "cf_email_domain": ["example.com"],
-                        "accounts_file": "accounts.txt",
                     }
                 ),
                 encoding="utf-8",

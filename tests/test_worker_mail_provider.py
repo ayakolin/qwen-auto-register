@@ -52,7 +52,6 @@ def make_config(tmp_dir):
         cf_email_domain=("example.com",),
         cf_admin_password="secret",
         cf_enable_random_subdomain=True,
-        accounts_file=Path(tmp_dir) / "accounts.txt",
     )
 
 

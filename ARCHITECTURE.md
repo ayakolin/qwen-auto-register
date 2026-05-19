@@ -66,7 +66,7 @@ flowchart TD
 ## 3. 核心模块职责
 
 - `src/auto_register/config.py`
-  - 读取当前项目根目录 `config.json`，提供 Worker 邮箱与本地账号输出配置。
+  - 读取当前项目根目录 `config.json`，提供 Worker 邮箱配置。
 
 - `src/auto_register/integrations/qwen_portal.py`
   - 主编排器：注册、等待激活邮件、打开激活链接、保存本地账号。
@@ -85,7 +85,7 @@ flowchart TD
 
 ## 4. 关键配置
 
-当前项目使用 `config.json` 配置 Worker 邮箱和账号输出：
+当前项目使用 `config.json` 配置 Worker 邮箱：
 
 ```json
 {
@@ -94,12 +94,11 @@ flowchart TD
     "example.com"
   ],
   "cf_admin_password": "replace-with-admin-password",
-  "cf_enable_random_subdomain": true,
-  "accounts_file": "accounts.txt"
+  "cf_enable_random_subdomain": true
 }
 ```
 
-`.env` 继续用于 UI 模式、端口和浏览器代理等运行时配置。
+`.env` 继续用于 UI 模式、端口和浏览器代理等运行时配置。注册激活成功后，账号统一追加写入项目根目录 `accounts.txt`。
 
 ## 5. 非活动链路
 

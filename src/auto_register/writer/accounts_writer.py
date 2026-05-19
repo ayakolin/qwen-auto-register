@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from ..config import load_worker_mail_config
+from ..config import project_root
 
 
 _WRITE_LOCK = threading.Lock()
@@ -19,7 +19,7 @@ def append_account(email: str, password: str, path: Optional[str | Path] = None)
     if not email:
         raise ValueError("email must not be empty")
 
-    output_path = Path(path) if path is not None else load_worker_mail_config().accounts_file
+    output_path = Path(path) if path is not None else project_root() / "accounts.txt"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with _WRITE_LOCK:

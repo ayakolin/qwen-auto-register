@@ -4,6 +4,5 @@
     "example.com"
   ],
   "cf_admin_password": "replace-with-admin-password",
-  "cf_enable_random_subdomain": true,
-  "accounts_file": "accounts.txt"
+  "cf_enable_random_subdomain": true
 }

@@ -1,4 +1,4 @@
-"""Project config loading for Worker mail and local account output."""
+"""Project config loading for Worker mail."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ class WorkerMailConfig:
     cf_email_domain: tuple[str, ...]
     cf_admin_password: str
     cf_enable_random_subdomain: bool
-    accounts_file: Path
 
 
 def project_root() -> Path:
@@ -71,15 +70,9 @@ def load_worker_mail_config(path: Path | None = None) -> WorkerMailConfig:
     if domain_value is None:
         raise ValueError("Missing required config field: cf_email_domain")
 
-    accounts_file = _required_str(data, "accounts_file")
-    accounts_path = Path(accounts_file)
-    if not accounts_path.is_absolute():
-        accounts_path = config_path.parent / accounts_path
-
     return WorkerMailConfig(
         cf_worker_domain=_required_str(data, "cf_worker_domain").rstrip("/"),
         cf_email_domain=_email_domains(domain_value),
         cf_admin_password=_required_str(data, "cf_admin_password"),
         cf_enable_random_subdomain=bool(data.get("cf_enable_random_subdomain", True)),
-        accounts_file=accounts_path,
     )

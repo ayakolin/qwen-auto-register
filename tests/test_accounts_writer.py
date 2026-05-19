@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from auto_register.writer.accounts_writer import append_account
 
@@ -34,6 +35,15 @@ class AccountsWriterTests(unittest.TestCase):
             append_account("user@example.com", "Password123", path=path)
 
             self.assertTrue(path.exists())
+
+    def test_default_output_is_project_root_accounts_txt(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            with patch("auto_register.writer.accounts_writer.project_root", return_value=root):
+                result = append_account("user@example.com", "Password123")
+
+            self.assertEqual(result, root / "accounts.txt")
+            self.assertEqual((root / "accounts.txt").read_text(encoding="utf-8"), "user@example.com:Password123\n")
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@
 
 ### New Config File
 
-在仓库根目录新增 `config.json`，只承载邮件与账号输出相关配置。
+在仓库根目录新增 `config.json`，只承载邮件相关配置。
 
 ### Config Keys
 
@@ -52,14 +52,15 @@
 - `cf_email_domain`
 - `cf_admin_password`
 - `cf_enable_random_subdomain`
-- `accounts_file`
 
 ### Config Boundaries
 
 - `config.json`
-  - 用于 Cloudflare Worker 邮箱创建、拉信、账号输出文件路径。
+  - 用于 Cloudflare Worker 邮箱创建、拉信。
 - `.env`
   - 继续用于 UI 模式、服务端口、Playwright 代理等运行时配置。
+
+账号输出路径固定为项目根目录 `accounts.txt`。
 
 不会将 LuckMail、Outlook、CPA、远程认证相关配置迁入当前活动链路。
 
@@ -94,7 +95,6 @@
 职责：
 
 - 保存当前项目自己的 Cloudflare Worker 邮件配置
-- 保存本地账号输出文件路径
 
 ### Add `src/auto_register/config.py`
 
@@ -263,7 +263,7 @@ Worker 邮件轮询层统一把邮件标准化为如下结构：
 
 - 删除当前活动链路中的远程认证描述
 - 增加 `config.json` 的邮件配置说明
-- 说明输出文件为本地 `accounts.txt`
+- 说明输出文件固定为本地 `accounts.txt`
 
 ### Backward Compatibility
 

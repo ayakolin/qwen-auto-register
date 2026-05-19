@@ -15,7 +15,7 @@
 当前项目有两类配置：
 
 - `.env`：UI 模式、端口、浏览器代理等运行参数。
-- `config.json`：Cloudflare Worker 邮箱与本地账号输出。
+- `config.json`：Cloudflare Worker 邮箱。
 
 `config.json` 示例：
 
@@ -26,12 +26,11 @@
     "example.com"
   ],
   "cf_admin_password": "replace-with-admin-password",
-  "cf_enable_random_subdomain": true,
-  "accounts_file": "accounts.txt"
+  "cf_enable_random_subdomain": true
 }
 ```
 
-成功注册并激活后，账号会追加写入 `accounts_file` 指向的文件，格式为：
+成功注册并激活后，账号会统一追加写入项目根目录 `accounts.txt`，格式为：
 
 ```text
 email@example.com:Password123

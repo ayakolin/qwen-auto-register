@@ -33,12 +33,12 @@ nano config.json
     "example.com"
   ],
   "cf_admin_password": "replace-with-admin-password",
-  "cf_enable_random_subdomain": true,
-  "accounts_file": "accounts.txt"
+  "cf_enable_random_subdomain": true
 }
 ```
 
 `.env` 只需要按需配置 UI 端口和代理。
+注册激活成功后，账号统一追加写入项目根目录 `accounts.txt`。
 
 ### 第 3 步：启动服务
 
