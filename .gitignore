@@ -49,3 +49,6 @@ Thumbs.db
 
 # Playwright
 .playwright/
+
+# Local worktrees
+.worktrees/
