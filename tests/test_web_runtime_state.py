@@ -37,37 +37,30 @@ class RuntimeStateTests(unittest.TestCase):
         self.assertEqual(snapshot["phase"], "error")
         self.assertEqual(snapshot["phase_message"], "failed")
 
-    def test_run_flow_propagates_runner_phase_changes(self):
+    def test_run_flow_does_not_require_phase_callback(self):
         state = RuntimeState()
         state.start_run()
         req = StartRequest(headless=False, loop_count=1)
 
         class FakeRunner:
-            def __init__(self, headless, on_step, check_stop, on_phase_change):
-                self._on_phase_change = on_phase_change
+            def __init__(self, headless, on_step, check_stop):
+                self.headless = headless
 
             def run(self):
-                self._on_phase_change("waiting_human_verification", "waiting for user")
-                self._on_phase_change("running", None)
                 return True
 
-        with patch.object(web_app, "STATE", state), patch.object(web_app, "QwenPortalRunner", FakeRunner), patch.object(
-            state, "set_phase", wraps=state.set_phase
-        ) as set_phase_mock:
+        with patch.object(web_app, "STATE", state), patch.object(web_app, "QwenPortalRunner", FakeRunner):
             web_app._run_flow(1, req)
 
-        self.assertTrue(
-            any(call.args[0] == "waiting_human_verification" for call in set_phase_mock.call_args_list)
-        )
         self.assertEqual(state.snapshot()["phase"], "success")
 
-    def test_run_flow_clears_proxy_env_when_request_has_no_proxy(self):
+    def test_run_flow_keeps_proxy_env_when_request_has_no_proxy(self):
         state = RuntimeState()
         state.start_run()
         req = StartRequest(headless=False, loop_count=1)
 
         class FakeRunner:
-            def __init__(self, headless, on_step, check_stop, on_phase_change):
+            def __init__(self, headless, on_step, check_stop):
                 pass
 
             def run(self):
@@ -100,10 +93,10 @@ class RuntimeStateTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
-        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY"])
-        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY_USERNAME"])
-        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY_PASSWORD"])
-        self.assertIsNone(observed["QWEN_PLAYWRIGHT_PROXY_BYPASS"])
+        self.assertEqual(observed["QWEN_PLAYWRIGHT_PROXY"], "http://127.0.0.1:8080")
+        self.assertEqual(observed["QWEN_PLAYWRIGHT_PROXY_USERNAME"], "user")
+        self.assertEqual(observed["QWEN_PLAYWRIGHT_PROXY_PASSWORD"], "pass")
+        self.assertEqual(observed["QWEN_PLAYWRIGHT_PROXY_BYPASS"], "localhost")
 
 
 if __name__ == "__main__":

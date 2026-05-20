@@ -50,6 +50,7 @@ class QwenPortalRunner:
         on_step: Optional[Callable[[str], None]] = None,
         check_stop: Optional[Callable[[], bool]] = None,
         on_phase_change: Optional[Callable[[str, Optional[str]], None]] = None,
+        enable_human_verification: bool = False,
     ):
         self._headless = headless
         self._headless_requested = headless
@@ -57,6 +58,7 @@ class QwenPortalRunner:
         self._check_stop = check_stop or (lambda: False)
         self._has_phase_listener = on_phase_change is not None
         self._on_phase_change = on_phase_change or (lambda _phase, _message=None: None)
+        self._enable_human_verification = enable_human_verification
         self._latest_creds: Optional[QwenCredentials] = None
 
     def _log(self, msg: str) -> None:
@@ -99,7 +101,7 @@ class QwenPortalRunner:
     def _browser_launch_options(self) -> dict:
         """Build Chromium launch options with optional proxy support."""
         headless = self._headless
-        if self._headless_requested and self._has_phase_listener:
+        if self._enable_human_verification and self._headless_requested and self._has_phase_listener:
             headless = False
             self._log("[Browser] 已启用人工验证支持，使用可见浏览器")
 
@@ -127,6 +129,9 @@ class QwenPortalRunner:
         return any(token in body_text for token in self.HUMAN_VERIFICATION_TEXTS)
 
     def _wait_for_human_verification(self, page: Page) -> bool:
+        if not self._enable_human_verification:
+            return True
+
         if not self._is_human_verification_page(page):
             return True
 

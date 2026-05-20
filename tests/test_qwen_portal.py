@@ -94,7 +94,7 @@ class FakePlaywright:
 
 
 class QwenPortalRunnerTests(unittest.TestCase):
-    def _run_with_fakes(self, append_account, *, body_texts=None, check_stop=None):
+    def _run_with_fakes(self, append_account, *, body_texts=None, check_stop=None, enable_human_verification=False):
         page = FakePage(body_texts=body_texts)
         logs = []
         provider = FakeMailProvider()
@@ -114,6 +114,7 @@ class QwenPortalRunnerTests(unittest.TestCase):
                 on_step=logs.append,
                 check_stop=check_stop or (lambda: False),
                 on_phase_change=lambda phase, message=None: phases.append((phase, message)),
+                enable_human_verification=enable_human_verification,
             )
             ok = runner.run()
         return ok, page, logs, provider, phases
@@ -147,7 +148,7 @@ class QwenPortalRunnerTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("本地账号写入失败" in line for line in logs))
 
-    def test_human_verification_phase_waits_then_resumes(self):
+    def test_human_verification_disabled_by_default(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "accounts.txt"
             append_account = Mock(return_value=output_path)
@@ -158,6 +159,25 @@ class QwenPortalRunnerTests(unittest.TestCase):
                     "Access Verification Please complete the operation to verify that you are a real person",
                     "The account is pending activation. Please activate your account through the verification email in your inbox.",
                 ],
+            )
+
+        self.assertTrue(ok)
+        self.assertNotIn(("waiting_human_verification", None), phases)
+        self.assertEqual(provider.events[-1], "wait")
+        self.assertFalse(any("人工验证" in line for line in logs))
+
+    def test_human_verification_phase_waits_then_resumes_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "accounts.txt"
+            append_account = Mock(return_value=output_path)
+
+            ok, _page, logs, provider, phases = self._run_with_fakes(
+                append_account,
+                body_texts=[
+                    "Access Verification Please complete the operation to verify that you are a real person",
+                    "The account is pending activation. Please activate your account through the verification email in your inbox.",
+                ],
+                enable_human_verification=True,
             )
 
         self.assertTrue(ok)
@@ -177,6 +197,7 @@ class QwenPortalRunnerTests(unittest.TestCase):
                 "Access Verification Please complete the operation to verify that you are a real person",
             ],
             check_stop=lambda: next(checks),
+            enable_human_verification=True,
         )
 
         self.assertFalse(ok)
@@ -208,6 +229,7 @@ class QwenPortalRunnerTests(unittest.TestCase):
                 headless=True,
                 on_step=logs.append,
                 on_phase_change=lambda phase, message=None: phases.append((phase, message)),
+                enable_human_verification=True,
             )
             ok = runner.run()
 

@@ -129,16 +129,6 @@ def _run_flow(run_id: int, req: StartRequest) -> None:
             if req.proxy_bypass:
                 os.environ["QWEN_PLAYWRIGHT_PROXY_BYPASS"] = req.proxy_bypass.strip()
                 STATE.append_log(f"[Web] 已设置代理绕过: {req.proxy_bypass.strip()}")
-        else:
-            for key in (
-                "QWEN_PLAYWRIGHT_PROXY",
-                "QWEN_PLAYWRIGHT_PROXY_USERNAME",
-                "QWEN_PLAYWRIGHT_PROXY_PASSWORD",
-                "QWEN_PLAYWRIGHT_PROXY_BYPASS",
-            ):
-                os.environ.pop(key, None)
-            STATE.append_log("[Web] 已清除本次运行的代理配置")
-
         # 循环执行
         loop_count = max(1, min(req.loop_count, 100))  # 限制在 1-100
         if loop_count > 1:
@@ -167,7 +157,6 @@ def _run_flow(run_id: int, req: StartRequest) -> None:
                             headless=req.headless, 
                             on_step=STATE.append_log,
                             check_stop=lambda: STATE.stop_requested,
-                            on_phase_change=STATE.set_phase,
                         )
                         result["ok"] = runner.run()
                     except Exception as e:
