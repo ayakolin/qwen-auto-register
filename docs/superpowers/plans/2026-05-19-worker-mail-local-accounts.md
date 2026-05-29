@@ -6,7 +6,7 @@
 
 **Architecture:** Add a small project config loader for `config.json`, replace the temp-mail provider with a Worker-only provider, add a focused local accounts writer, and simplify `QwenPortalRunner` so activation plus local write is the success boundary. Keep Web/GUI entry points intact while updating labels and docs.
 
-**Tech Stack:** Python 3, standard-library `unittest`, `httpx`, Playwright sync API.
+**Tech Stack:** Python 3, standard-library `unittest`, `httpx`, Patchright sync API.
 
 ---
 
@@ -119,7 +119,7 @@ Expected: PASS.
 
 - [ ] **Step 1: Write failing portal tests**
 
-Add tests using fake provider, fake Playwright, and fake writer to verify:
+Add tests using fake provider, fake Patchright runtime, and fake writer to verify:
 
 - Activation success appends the local account and returns `True`.
 - The remote auth method is never called after activation.

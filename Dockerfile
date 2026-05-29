@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.52.0-jammy
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -8,6 +8,7 @@ COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
+    && python -m patchright install --with-deps chromium \
     && pip install --no-cache-dir -e .
 
 EXPOSE 18080

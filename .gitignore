@@ -47,8 +47,11 @@ Thumbs.db
 *.manifest
 *.spec
 
-# Playwright
+# Browser automation artifacts
 .playwright/
 
 # Local worktrees
 .worktrees/
+
+# Account files
+accounts.txt

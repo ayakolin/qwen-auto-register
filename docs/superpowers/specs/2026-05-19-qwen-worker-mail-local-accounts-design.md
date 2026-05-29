@@ -9,7 +9,7 @@
 当前项目的活动链路为：
 
 1. 使用 `Mail.tm / 1secMail / 旧 Cloud Mail` 创建临时邮箱
-2. Playwright 打开 Qwen 注册页并提交
+2. Patchright 打开 Qwen 注册页并提交
 3. 轮询邮箱获取激活链接并打开
 4. 调用远程 CLI Proxy API 获取登录链接
 5. 自动完成远程授权页登录与确认
@@ -58,7 +58,7 @@
 - `config.json`
   - 用于 Cloudflare Worker 邮箱创建、拉信。
 - `.env`
-  - 继续用于 UI 模式、服务端口、Playwright 代理等运行时配置。
+  - 继续用于 UI 模式、服务端口、Patchright 代理等运行时配置。
 
 账号输出路径固定为项目根目录 `accounts.txt`。
 
@@ -71,7 +71,7 @@
 1. 读取 `.env`，启动 Web 或 GUI。
 2. 读取当前项目 `config.json` 中的 Worker 邮件配置。
 3. 使用 Cloudflare Worker 创建临时邮箱。
-4. Playwright 打开 Qwen 注册页并提交注册。
+4. Patchright 打开 Qwen 注册页并提交注册。
 5. 记录当前邮箱快照，仅轮询后续新邮件。
 6. 从新邮件正文中提取激活链接。
 7. 浏览器打开激活链接完成邮箱激活。

@@ -56,7 +56,7 @@ flowchart TD
   E --> F[QwenPortalRunner.run]
   F --> G[生成用户名和密码]
   G --> H[Cloudflare Worker 创建临时邮箱]
-  H --> I[Playwright 注册]
+  H --> I[Patchright 注册]
   I --> J[Worker 拉信并轮询新邮件]
   J --> K[提取并打开激活链接]
   K --> L[追加写入 accounts.txt]

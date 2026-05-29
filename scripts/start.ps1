@@ -76,9 +76,9 @@ if (-not $SkipInstall) {
         exit 1
     }
 
-    & $venvPython -m playwright install chromium
+    & $venvPython -m patchright install chromium
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "Failed to install Playwright Chromium"
+        Write-Err "Failed to install Patchright Chromium"
         exit 1
     }
 
@@ -93,7 +93,7 @@ if (-not $SkipInstall) {
 
     $oldEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & $venvPython -c "import customtkinter, playwright, httpx, fastapi, uvicorn" *> $null
+    & $venvPython -c "import customtkinter, patchright, httpx, fastapi, uvicorn" *> $null
     $depExit = $LASTEXITCODE
     $ErrorActionPreference = $oldEap
 

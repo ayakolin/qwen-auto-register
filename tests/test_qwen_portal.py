@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -63,7 +64,8 @@ class FakeBrowser:
         self.page = page
         self.closed = False
 
-    def new_context(self):
+    def new_context(self, **kwargs):
+        self.page.context_options = kwargs
         return self
 
     def new_page(self):
@@ -82,7 +84,7 @@ class FakeChromium:
         return FakeBrowser(self.page)
 
 
-class FakePlaywright:
+class FakePatchright:
     def __init__(self, page):
         self.chromium = FakeChromium(page)
 
@@ -94,6 +96,108 @@ class FakePlaywright:
 
 
 class QwenPortalRunnerTests(unittest.TestCase):
+    def test_runtime_uses_patchright_sync_api(self):
+        self.assertTrue(
+            qwen_portal.sync_playwright.__module__.startswith("patchright."),
+            qwen_portal.sync_playwright.__module__,
+        )
+
+    def test_patchright_proxy_env_names_take_priority_over_legacy_aliases(self):
+        runner = qwen_portal.QwenPortalRunner()
+
+        with patch.dict(
+            os.environ,
+            {
+                "QWEN_PATCHRIGHT_PROXY": "http://patchright.example:7890",
+                "QWEN_PLAYWRIGHT_PROXY": "http://playwright.example:7890",
+                "QWEN_PATCHRIGHT_PROXY_BYPASS": "localhost,127.0.0.1",
+                "QWEN_PLAYWRIGHT_PROXY_BYPASS": "legacy.local",
+                "QWEN_PATCHRIGHT_PROXY_USERNAME": "patch-user",
+                "QWEN_PLAYWRIGHT_PROXY_USERNAME": "legacy-user",
+                "QWEN_PATCHRIGHT_PROXY_PASSWORD": "patch-pass",
+                "QWEN_PLAYWRIGHT_PROXY_PASSWORD": "legacy-pass",
+            },
+            clear=True,
+        ):
+            proxy = runner._resolve_browser_proxy()
+
+        self.assertEqual(
+            proxy,
+            {
+                "server": "http://patchright.example:7890",
+                "bypass": "localhost,127.0.0.1",
+                "username": "patch-user",
+                "password": "patch-pass",
+            },
+        )
+
+    def test_legacy_playwright_proxy_env_names_still_work(self):
+        runner = qwen_portal.QwenPortalRunner()
+
+        with patch.dict(
+            os.environ,
+            {
+                "QWEN_PLAYWRIGHT_PROXY": "http://legacy.example:7890",
+                "QWEN_PLAYWRIGHT_PROXY_BYPASS": "legacy.local",
+                "QWEN_PLAYWRIGHT_PROXY_USERNAME": "legacy-user",
+                "QWEN_PLAYWRIGHT_PROXY_PASSWORD": "legacy-pass",
+            },
+            clear=True,
+        ):
+            proxy = runner._resolve_browser_proxy()
+
+        self.assertEqual(
+            proxy,
+            {
+                "server": "http://legacy.example:7890",
+                "bypass": "legacy.local",
+                "username": "legacy-user",
+                "password": "legacy-pass",
+            },
+        )
+
+    def test_browser_context_uses_fixed_desktop_device_options(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "accounts.txt"
+            append_account = Mock(return_value=output_path)
+
+            ok, page, _logs, _provider, _phases = self._run_with_fakes(
+                append_account,
+                body_texts=["The account is pending activation."],
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(
+            page.context_options,
+            {
+                "viewport": {"width": 1280, "height": 720},
+                "screen": {"width": 1280, "height": 720},
+                "device_scale_factor": 1,
+                "is_mobile": False,
+                "has_touch": False,
+                "color_scheme": "light",
+                "locale": "zh-CN",
+            },
+        )
+
+    def test_browser_context_uses_chinese_language_and_preserves_local_time_and_location(self):
+        runner = qwen_portal.QwenPortalRunner()
+
+        context_options = runner._browser_context_options()
+
+        self.assertEqual(context_options["locale"], "zh-CN")
+        self.assertNotIn("timezone_id", context_options)
+        self.assertNotIn("geolocation", context_options)
+        self.assertNotIn("user_agent", context_options)
+
+    def test_browser_context_options_are_not_randomized(self):
+        runner = qwen_portal.QwenPortalRunner()
+
+        first = runner._browser_context_options()
+        second = runner._browser_context_options()
+
+        self.assertEqual(first, second)
+
     def _run_with_fakes(self, append_account, *, body_texts=None, check_stop=None, enable_human_verification=False):
         page = FakePage(body_texts=body_texts)
         logs = []
@@ -103,7 +207,7 @@ class QwenPortalRunnerTests(unittest.TestCase):
             provider.events.append("register")
 
         with patch.object(qwen_portal, "get_email_provider", return_value=provider), patch.object(
-            qwen_portal, "sync_playwright", return_value=FakePlaywright(page)
+            qwen_portal, "sync_playwright", return_value=FakePatchright(page)
         ), patch.object(qwen_portal, "_generate_password", return_value="Password123"), patch.object(
             qwen_portal, "append_account", append_account, create=True
         ), patch.object(qwen_portal.QwenPortalRunner, "_do_register", fake_register), patch.object(
@@ -219,7 +323,7 @@ class QwenPortalRunnerTests(unittest.TestCase):
             provider.events.append("register")
 
         with patch.object(qwen_portal, "get_email_provider", return_value=provider), patch.object(
-            qwen_portal, "sync_playwright", return_value=FakePlaywright(page)
+            qwen_portal, "sync_playwright", return_value=FakePatchright(page)
         ), patch.object(qwen_portal, "_generate_password", return_value="Password123"), patch.object(
             qwen_portal, "append_account", append_account, create=True
         ), patch.object(qwen_portal.QwenPortalRunner, "_do_register", fake_register), patch.object(

@@ -9,7 +9,7 @@ description = "Automated registration with Qwen token acquisition for OpenClaw"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "playwright>=1.40.0",
+    "patchright>=1.59.0",
     "httpx>=0.25.0",
     "customtkinter>=5.2.0",
     "pydantic>=2.0.0",

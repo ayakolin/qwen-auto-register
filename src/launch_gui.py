@@ -16,8 +16,8 @@ if __name__ == "__main__":
         pass
 
     if getattr(sys, "frozen", False):
-        pw_path = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_path)
+        browser_path = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browser_path)
 
     from auto_register.main import main
 

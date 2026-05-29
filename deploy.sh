@@ -40,9 +40,9 @@ echo "4️⃣  安装依赖..."
 ssh "$SERVER_USER@$SERVER_HOST" "cd $SERVER_PATH && .venv/bin/pip install --upgrade pip setuptools wheel"
 ssh "$SERVER_USER@$SERVER_HOST" "cd $SERVER_PATH && .venv/bin/pip install -e ."
 
-# 5. 安装 Playwright 浏览器
-echo "5️⃣  安装 Playwright 浏览器..."
-ssh "$SERVER_USER@$SERVER_HOST" "cd $SERVER_PATH && .venv/bin/playwright install chromium"
+# 5. 安装 Patchright 浏览器
+echo "5️⃣  安装 Patchright 浏览器..."
+ssh "$SERVER_USER@$SERVER_HOST" "cd $SERVER_PATH && .venv/bin/patchright install chromium"
 
 # 6. 创建 systemd 服务
 echo "6️⃣  创建 systemd 服务..."

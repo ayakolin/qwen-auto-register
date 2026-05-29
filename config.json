@@ -1,8 +1,9 @@
 {
-  "cf_worker_domain": "mail.example.com",
+  "cf_worker_domain": "api.promaxhello.cloud",
   "cf_email_domain": [
-    "example.com"
+    "promaxhello.cloud",
+    "yachi8000.org"
   ],
-  "cf_admin_password": "replace-with-admin-password",
+  "cf_admin_password": "UijC7MYZUZau9n7qyRbsTbBoCzzdQD_u",
   "cf_enable_random_subdomain": true
 }

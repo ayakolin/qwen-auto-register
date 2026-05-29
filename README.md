@@ -20,7 +20,7 @@
 
 ```bash
 pip install -r requirements.txt
-playwright install chromium
+patchright install chromium
 ```
 
 ## 快速启动（Windows）
@@ -99,18 +99,20 @@ email@example.com:Password123
 
 ### 浏览器代理（注册/激活页）
 
-Playwright 浏览器会按以下优先级读取代理：
+Patchright 浏览器会按以下优先级读取代理：
 
-1. `QWEN_PLAYWRIGHT_PROXY`
-2. `PLAYWRIGHT_PROXY`
-3. `HTTPS_PROXY`
-4. `HTTP_PROXY`
+1. `QWEN_PATCHRIGHT_PROXY`
+2. `PATCHRIGHT_PROXY`
+3. `QWEN_PLAYWRIGHT_PROXY`（兼容旧配置）
+4. `PLAYWRIGHT_PROXY`（兼容旧配置）
+5. `HTTPS_PROXY`
+6. `HTTP_PROXY`
 
 示例：
 
 ```dotenv
-QWEN_PLAYWRIGHT_PROXY=http://127.0.0.1:7897
-QWEN_PLAYWRIGHT_PROXY_BYPASS=127.0.0.1,localhost,192.168.10.219
+QWEN_PATCHRIGHT_PROXY=http://127.0.0.1:7897
+QWEN_PATCHRIGHT_PROXY_BYPASS=127.0.0.1,localhost,192.168.10.219
 ```
 
 在 Docker 内如果代理在宿主机，请用 `host.docker.internal`：

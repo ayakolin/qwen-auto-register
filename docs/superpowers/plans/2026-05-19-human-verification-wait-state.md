@@ -6,7 +6,7 @@
 
 **Architecture:** Extend the runner with page-state detection and phase callbacks, teach the Web runtime state to expose explicit phases, and render a blocking overlay in the Web UI when manual verification is required. Keep the existing mailbox and local account flow intact after the page leaves verification mode.
 
-**Tech Stack:** Python 3, FastAPI, Playwright sync API, standard-library `unittest`.
+**Tech Stack:** Python 3, FastAPI, Patchright sync API, standard-library `unittest`.
 
 ---
 

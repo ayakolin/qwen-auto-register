@@ -115,19 +115,19 @@ def _run_flow(run_id: int, req: StartRequest) -> None:
     try:
         # 应用代理配置
         if req.proxy_server:
-            os.environ["QWEN_PLAYWRIGHT_PROXY"] = req.proxy_server.strip()
+            os.environ["QWEN_PATCHRIGHT_PROXY"] = req.proxy_server.strip()
             STATE.append_log(f"[Web] 已设置代理服务器: {req.proxy_server.strip()}")
             
             if req.proxy_username:
-                os.environ["QWEN_PLAYWRIGHT_PROXY_USERNAME"] = req.proxy_username.strip()
+                os.environ["QWEN_PATCHRIGHT_PROXY_USERNAME"] = req.proxy_username.strip()
                 STATE.append_log(f"[Web] 已设置代理用户名")
             
             if req.proxy_password:
-                os.environ["QWEN_PLAYWRIGHT_PROXY_PASSWORD"] = req.proxy_password.strip()
+                os.environ["QWEN_PATCHRIGHT_PROXY_PASSWORD"] = req.proxy_password.strip()
                 STATE.append_log(f"[Web] 已设置代理密码")
             
             if req.proxy_bypass:
-                os.environ["QWEN_PLAYWRIGHT_PROXY_BYPASS"] = req.proxy_bypass.strip()
+                os.environ["QWEN_PATCHRIGHT_PROXY_BYPASS"] = req.proxy_bypass.strip()
                 STATE.append_log(f"[Web] 已设置代理绕过: {req.proxy_bypass.strip()}")
         # 循环执行
         loop_count = max(1, min(req.loop_count, 100))  # 限制在 1-100
@@ -147,7 +147,7 @@ def _run_flow(run_id: int, req: StartRequest) -> None:
             STATE.append_log(f"\n[Web] ========== 第 {iteration_num}/{loop_count} 次运行 ==========")
             
             try:
-                # 为每次循环启动一个全新的独立线程，防止 Playwright 状态/事件循环在连续调用时被重用而导致超时
+                # 为每次循环启动一个全新的独立线程，防止 Patchright 状态/事件循环在连续调用时被重用而导致超时
                 import threading
                 
                 result = {"ok": False, "error": None, "traceback": None}

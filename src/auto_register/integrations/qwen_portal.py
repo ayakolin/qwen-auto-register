@@ -5,7 +5,7 @@ import string
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from playwright.sync_api import Page, sync_playwright
+from patchright.sync_api import Page, sync_playwright
 
 from ..providers.one_sec_mail_provider import get_email_provider
 from ..providers.username_provider import UsernameProvider
@@ -33,6 +33,15 @@ def _generate_password(length: int = 14) -> str:
     pwd += list(random.choices(string.ascii_letters + string.digits, k=length - 3))
     random.shuffle(pwd)
     return "".join(pwd)
+
+
+def _first_env_value(*names: str) -> str:
+    """Return the first non-empty environment value from a priority list."""
+    for name in names:
+        value = (os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return ""
 
 
 class QwenPortalRunner:
@@ -68,29 +77,39 @@ class QwenPortalRunner:
         self._on_phase_change(phase, message)
 
     def _resolve_browser_proxy(self) -> Optional[dict]:
-        """Resolve Playwright proxy from env for browser automation."""
-        proxy_server = (
-            os.environ.get("QWEN_PLAYWRIGHT_PROXY")
-            or os.environ.get("PLAYWRIGHT_PROXY")
-            or os.environ.get("HTTPS_PROXY")
-            or os.environ.get("HTTP_PROXY")
-            or ""
-        ).strip()
+        """Resolve Patchright proxy from env for browser automation."""
+        proxy_server = _first_env_value(
+            "QWEN_PATCHRIGHT_PROXY",
+            "PATCHRIGHT_PROXY",
+            "QWEN_PLAYWRIGHT_PROXY",
+            "PLAYWRIGHT_PROXY",
+            "HTTPS_PROXY",
+            "HTTP_PROXY",
+        )
         if not proxy_server:
             return None
 
         proxy: dict = {"server": proxy_server}
 
-        bypass = (
-            os.environ.get("QWEN_PLAYWRIGHT_PROXY_BYPASS")
-            or os.environ.get("NO_PROXY")
-            or ""
-        ).strip()
+        bypass = _first_env_value(
+            "QWEN_PATCHRIGHT_PROXY_BYPASS",
+            "PATCHRIGHT_PROXY_BYPASS",
+            "QWEN_PLAYWRIGHT_PROXY_BYPASS",
+            "NO_PROXY",
+        )
         if bypass:
             proxy["bypass"] = bypass
 
-        username = (os.environ.get("QWEN_PLAYWRIGHT_PROXY_USERNAME") or "").strip()
-        password = (os.environ.get("QWEN_PLAYWRIGHT_PROXY_PASSWORD") or "").strip()
+        username = _first_env_value(
+            "QWEN_PATCHRIGHT_PROXY_USERNAME",
+            "PATCHRIGHT_PROXY_USERNAME",
+            "QWEN_PLAYWRIGHT_PROXY_USERNAME",
+        )
+        password = _first_env_value(
+            "QWEN_PATCHRIGHT_PROXY_PASSWORD",
+            "PATCHRIGHT_PROXY_PASSWORD",
+            "QWEN_PLAYWRIGHT_PROXY_PASSWORD",
+        )
         if username:
             proxy["username"] = username
         if password:
@@ -115,8 +134,20 @@ class QwenPortalRunner:
             if bypass:
                 self._log(f"[Browser] 代理绕过列表: {bypass}")
         else:
-            self._log("[Browser] 未配置 Playwright 代理，直连访问")
+            self._log("[Browser] 未配置 Patchright 代理，直连访问")
         return options
+
+    def _browser_context_options(self) -> dict:
+        """Build fixed desktop context options without overriding local time or location."""
+        return {
+            "viewport": {"width": 1280, "height": 720},
+            "screen": {"width": 1280, "height": 720},
+            "device_scale_factor": 1,
+            "is_mobile": False,
+            "has_touch": False,
+            "color_scheme": "light",
+            "locale": "zh-CN",
+        }
 
     def _page_body_text(self, page: Page) -> str:
         try:
@@ -179,7 +210,7 @@ class QwenPortalRunner:
 
         with sync_playwright() as p:
             browser = p.chromium.launch(**self._browser_launch_options())
-            context = browser.new_context()
+            context = browser.new_context(**self._browser_context_options())
             page = context.new_page()
 
             try:

@@ -58,13 +58,13 @@ try {
 }
 Pop-Location
 
-# ========== 3. Playwright Chromium ==========
-Write-Step "Playwright Chromium..."
+# ========== 3. Patchright Chromium ==========
+Write-Step "Patchright Chromium..."
 
 $env:PLAYWRIGHT_BROWSERS_PATH = "0"
 $chromiumInstalled = $false
 try {
-    $checkScript = Join-Path $ScriptDir "check_playwright.py"
+    $checkScript = Join-Path $ScriptDir "check_patchright.py"
 $checkResult = & $pythonCmd $checkScript 2>&1
     if ($LASTEXITCODE -eq 0 -and $checkResult) {
         $chromiumInstalled = $true
@@ -74,7 +74,7 @@ $checkResult = & $pythonCmd $checkScript 2>&1
 
 if (-not $chromiumInstalled) {
     Write-Host "Installing Chromium..."
-    & $pythonCmd -m playwright install chromium
+    & $pythonCmd -m patchright install chromium
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Chromium install failed"
         Write-Host "Press Enter to continue, or Ctrl+C to exit" -ForegroundColor Yellow
@@ -127,7 +127,7 @@ $pyinstallerArgs = @(
     "--hidden-import", "auto_register.utils.token_utils",
     "--hidden-import", "auto_register.utils.gateway",
     "--hidden-import", "customtkinter",
-    "--hidden-import", "playwright",
+    "--hidden-import", "patchright",
     "--hidden-import", "httpx"
 ) + $addDataArgs + @(
     ("$ProjectRoot\src\launch_gui.py")
@@ -160,6 +160,6 @@ Write-Host ('  Size: ' + $exeSize + ' MB') -ForegroundColor Gray
 Write-Host ""
 Write-Host 'Notes:' -ForegroundColor Yellow
 Write-Host '  - First run may be slow'
-Write-Host '  - If Chromium missing run playwright install chromium'
+Write-Host '  - If Chromium missing run patchright install chromium'
 Write-Host '  - exe file size is large'
 Write-Host ""

@@ -94,7 +94,7 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install -e .
-playwright install chromium
+patchright install chromium
 ```
 
 ### 3. 配置
@@ -152,16 +152,18 @@ docker exec -it auto-register bash
 
 ## 代理配置
 
-Playwright 浏览器读取代理的优先级：
+Patchright 浏览器读取代理的优先级：
 
-1. `QWEN_PLAYWRIGHT_PROXY`
-2. `PLAYWRIGHT_PROXY`
-3. `HTTPS_PROXY`
-4. `HTTP_PROXY`
+1. `QWEN_PATCHRIGHT_PROXY`
+2. `PATCHRIGHT_PROXY`
+3. `QWEN_PLAYWRIGHT_PROXY`（兼容旧配置）
+4. `PLAYWRIGHT_PROXY`（兼容旧配置）
+5. `HTTPS_PROXY`
+6. `HTTP_PROXY`
 
 示例：
 
 ```dotenv
-QWEN_PLAYWRIGHT_PROXY=http://127.0.0.1:7897
-QWEN_PLAYWRIGHT_PROXY_BYPASS=127.0.0.1,localhost
+QWEN_PATCHRIGHT_PROXY=http://127.0.0.1:7897
+QWEN_PATCHRIGHT_PROXY_BYPASS=127.0.0.1,localhost
 ```

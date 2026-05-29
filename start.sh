@@ -84,12 +84,12 @@ if [[ $SKIP_INSTALL -eq 0 ]]; then
   step "Install or update dependencies"
   "$VENV_PYTHON" -m pip install --upgrade pip
   "$VENV_PYTHON" -m pip install -r requirements.txt
-  "$VENV_PYTHON" -m playwright install chromium
+  "$VENV_PYTHON" -m patchright install chromium
   "$VENV_PYTHON" -m pip install -e .
   ok "Dependencies ready"
 else
   warn "Skipped dependency installation (--skip-install)"
-  if ! "$VENV_PYTHON" -c "import customtkinter, playwright, httpx, fastapi, uvicorn" >/dev/null 2>&1; then
+  if ! "$VENV_PYTHON" -c "import customtkinter, patchright, httpx, fastapi, uvicorn" >/dev/null 2>&1; then
     err "Dependencies are missing in $VENV_DIR. Run ./start.sh once without --skip-install."
     exit 1
   fi

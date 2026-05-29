@@ -33,7 +33,7 @@ def _pkce() -> tuple[str, str]:
 
 
 def request_device_code(page: Optional[object] = None) -> dict:
-    """请求设备码，返回 {device_code, user_code, verification_uri, ...}。page 为 Playwright Page 时在浏览器内请求以通过 WAF。"""
+    """请求设备码，返回 {device_code, user_code, verification_uri, ...}。page 为 Patchright Page 时在浏览器内请求以通过 WAF。"""
     verifier, challenge = _pkce()
     body = {
         "client_id": CLIENT_ID,
@@ -82,7 +82,7 @@ def request_device_code(page: Optional[object] = None) -> dict:
 
 def poll_token(device_code: str, code_verifier: str, page: Optional[object] = None) -> tuple[str, dict | None]:
     """
-    轮询 token 端点。page 为 Playwright Page 时在浏览器内请求。
+    轮询 token 端点。page 为 Patchright Page 时在浏览器内请求。
     返回 (status, result):
       ("pending", None) - 等待授权
       ("pending", {"slow_down": True}) - 等待授权，需降低轮询频率
@@ -177,7 +177,7 @@ def run_device_code_flow(
     执行设备码 OAuth 流程，获取 API token（与 openclaw onboard 一致格式）。
     - open_verification_url: 接收 (url, user_code)，打开授权页（用户需已登录 chat.qwen.ai）
     - on_wait: 可选，轮询时回调
-    - page_for_requests: Playwright Page，在浏览器上下文中请求以通过 WAF（可选）
+    - page_for_requests: Patchright Page，在浏览器上下文中请求以通过 WAF（可选）
     返回 {access, refresh, expires} 或 None
     """
     dev = request_device_code(page=page_for_requests)
